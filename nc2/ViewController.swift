@@ -21,9 +21,7 @@ class ViewController: NSViewController {
                 scene.scaleMode = .aspectFill
                 view.presentScene(scene)
             }
-            
             view.ignoresSiblingOrder = true
-            
             view.showsFPS = true
             view.showsNodeCount = true
         }

@@ -11,6 +11,8 @@ import GameplayKit
 import AVFoundation
 
 class GameScene: SKScene, SKPhysicsContactDelegate {
+    var tutorialOverlay: SKSpriteNode?
+    
     var ghost = SKSpriteNode()
     var ghostTexture = SKTexture(imageNamed: "ghost")
     
@@ -24,23 +26,14 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
     var isGhostControlled = true
     var isGameOver = false
     
-    var startPoint = CGPoint()
-    var touchPoint = CGPoint()
-    
     let humanFrameNames = ["humanIdle", "humanConfused", "humanCaught", "humanSurprised", "humanFall"]
     var humanFrames = [SKTexture]()
     var textureAtlasHuman = SKTextureAtlas(named: "humanAnimation")
     
-    var audioPlayer: AVAudioPlayer?
-    let humanSounds = ["humanSound1", "humanSound2", "humanSound3"]
-    
-    enum bitMasks: UInt32 {
-        case ghost = 0b1
-        case ground = 0b10
-        case human = 0b100
-    }
+    var audioManager = AudioManager()
     
     override func didMove(to view: SKView) {
+        showTutorialOverlay()
         physicsWorld.contactDelegate = self
         for node in self.children {
             if(node.name == "PhysicsMap") {
@@ -64,7 +57,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
     
     func addGhost() {
         ghost = childNode(withName: "ghost") as! SKSpriteNode
-        ghost.physicsBody = SKPhysicsBody(texture: ghost.texture!, size: ghost.size)
+        ghost.physicsBody = SKPhysicsBody(texture: ghostTexture, size: ghost.size)
         ghost.physicsBody?.allowsRotation = false
         ghost.physicsBody?.categoryBitMask = bitMasks.ghost.rawValue
         ghost.physicsBody?.contactTestBitMask = bitMasks.ground.rawValue
@@ -99,7 +92,8 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
 
         let playSoundAction = SKAction.run { [weak self] in
             guard let self = self else { return }
-            playRandomHumanSound()
+            audioManager.playRandomHumanSound()
+            human.texture = humanFrames[1]
         }
         
         let sequence = SKAction.sequence([
@@ -113,25 +107,6 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         ])
         
         human.run(SKAction.repeatForever(sequence))
-    }
-    
-    func playRandomHumanSound() {
-        guard let randomSoundName = humanSounds.randomElement() else {
-            return
-        }
-        
-        guard let soundURL = Bundle.main.url(forResource: randomSoundName, withExtension: "mp3") else {
-            return
-        }
-        
-        do {
-            audioPlayer = try AVAudioPlayer(contentsOf: soundURL)
-            audioPlayer?.prepareToPlay()
-            audioPlayer?.play()
-            human.texture = humanFrames[1]
-        } catch {
-            print("Could not load sound file: \(error)")
-        }
     }
     
     func tileMapPhysicsBody(map: SKTileMapNode) {
@@ -165,6 +140,32 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         }
     }
     
+    func showTutorialOverlay() {
+        tutorialOverlay = SKSpriteNode(color: .black, size: CGSize(width: self.size.width, height: self.size.height))
+        tutorialOverlay?.alpha = 0.7
+        tutorialOverlay?.position = CGPoint(x: self.size.width / 2, y: self.size.height / 2)
+        
+        let tutorialLabel = SKLabelNode(text: "Give pressure to trackpad to move")
+        tutorialLabel.fontColor = .white
+        tutorialLabel.fontSize = 30
+        tutorialLabel.position = CGPoint(x: 0, y: 100)
+        tutorialOverlay?.addChild(tutorialLabel)
+        
+        if let tutorialOverlay = tutorialOverlay {
+            self.addChild(tutorialOverlay)
+            let waitAction = SKAction.wait(forDuration: 5.0)
+            let hideAction = SKAction.run { [weak self] in
+                self?.hideTutorialOverlay()
+            }
+            let sequence = SKAction.sequence([waitAction, hideAction])
+            tutorialOverlay.run(sequence)
+        }
+    }
+    
+    func hideTutorialOverlay() {
+        tutorialOverlay?.removeFromParent()
+    }
+    
     func didBegin(_ contact: SKPhysicsContact) {
         let bodyA = contact.bodyA
         let bodyB = contact.bodyB
@@ -174,17 +175,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
             isGhostControlled = false
             human.removeAllActions()
             
-            guard let soundURL = Bundle.main.url(forResource: "humanSoundSurprised", withExtension: "mp3") else {
-                return
-            }
-            
-            do {
-                audioPlayer = try AVAudioPlayer(contentsOf: soundURL)
-                audioPlayer?.prepareToPlay()
-                audioPlayer?.play()
-            } catch {
-                print("Could not load sound file: \(error)")
-            }
+            audioManager.playSurprisedHumanSound()
             
             isGameOver = true
             self.human.xScale = -abs(self.human.xScale)
@@ -192,7 +183,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
             human.physicsBody?.affectedByGravity = false
             
             let waitAction1 = SKAction.wait(forDuration: 1.0)
-            let moveAction = SKAction.moveBy(x: 120, y: 0, duration: 1.0)
+            let moveAction = SKAction.moveBy(x: 150, y: 0, duration: 1.0)
             let changeTextureAction = SKAction.run { [weak self] in
                 self?.human.texture = self?.humanFrames[4]
             }
